@@ -450,6 +450,102 @@ def push(project, target, dry_run):
 @main.command()
 @click.option("--project", "-p", default=None, help="Project ID (overrides config)")
 @click.option("--target", default=".", type=click.Path(exists=True), help="Project directory")
+@click.option("--pending-count", is_flag=True, help="Just print the pending count and exit")
+def review(project, target, pending_count):
+    """Review and approve/reject staged shared-store nodes."""
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.prompt import Prompt
+    from rich.table import Table
+    from src.store.vector_store import MemoryStore
+    from src.sync.review import Reviewer, ReviewAction, ReviewDecision
+
+    console = Console()
+    project_id, local_path, shared_path, developer = _resolve_sync_paths(target, project)
+
+    if not shared_path:
+        console.print("[red]No shared store configured. Set shared_store_path in .cognitive/config.json or CMM_SHARED_STORE_PATH.[/red]")
+        return
+
+    store = MemoryStore(local_path=local_path, shared_path=shared_path)
+    reviewer = Reviewer(store=store, reviewer_name=developer or "anonymous")
+
+    if pending_count:
+        n = reviewer.pending_count(project_id)
+        scope = f" for {project_id}" if project_id else ""
+        console.print(f"{n} nodes pending review{scope}")
+        return
+
+    pending = reviewer.list_pending(project_id)
+    if not pending:
+        console.print("[green]No pending nodes to review.[/green]")
+        return
+
+    console.print(Panel(
+        f"[bold]Cognitive Memory Review[/bold]\n"
+        f"Project: [cyan]{project_id or 'all projects'}[/cyan]\n"
+        f"Pending: [yellow]{len(pending)}[/yellow] nodes\n"
+        f"Reviewer: [cyan]{developer or 'anonymous'}[/cyan]",
+        style="blue",
+    ))
+
+    def _prompt_for(node, idx, total):
+        while True:
+            console.rule(f"[bold cyan]Node {idx + 1} / {total}[/bold cyan]")
+            ntype = (node.get("node_type") or "?").upper()
+            scope = node.get("scope", "project")
+            conf = node.get("confidence", 0)
+            session = node.get("session_id", "?")
+            source = node.get("source_developer") or "unknown"
+            console.print(
+                f"[bold]{ntype}[/bold]   "
+                f"scope=[{'magenta' if scope == 'team' else 'green'}]{scope}[/]   "
+                f"confidence=[yellow]{conf:.2f}[/]   "
+                f"by [cyan]{source}[/cyan]   "
+                f"session=[dim]{session}[/dim]"
+            )
+            console.print()
+            console.print(f"[bold]Summary:[/bold] {node.get('summary', '')}")
+            evidence = node.get("evidence", "")
+            if evidence:
+                console.print(f"[bold]Evidence:[/bold] [dim]{evidence[:300]}[/dim]")
+            console.print()
+
+            choice = Prompt.ask(
+                "[a]pprove  [r]eject  [s]wap-scope  [e]dit  [k]skip  [q]uit",
+                choices=["a", "r", "s", "e", "k", "q"],
+                default="a",
+            )
+
+            if choice == "a":
+                return ReviewDecision(action=ReviewAction.APPROVE)
+            if choice == "r":
+                reason = Prompt.ask("Rejection reason (optional)", default="")
+                return ReviewDecision(action=ReviewAction.REJECT, reason=reason)
+            if choice == "s":
+                new_scope = "team" if scope == "project" else "project"
+                console.print(f"[dim]Scope flipped: {scope} → {new_scope}[/dim]")
+                return ReviewDecision(action=ReviewAction.SWAP_SCOPE, new_scope=new_scope)
+            if choice == "e":
+                new_summary = Prompt.ask("New summary", default=node.get("summary", ""))
+                return ReviewDecision(action=ReviewAction.EDIT_SUMMARY, new_summary=new_summary)
+            if choice == "k":
+                return ReviewDecision(action=ReviewAction.SKIP)
+            if choice == "q":
+                return ReviewDecision(action=ReviewAction.QUIT)
+
+    summary = reviewer.review(project_id, _prompt_for)
+
+    console.print()
+    console.rule()
+    console.print(f"[bold green]✓ {summary.text}[/bold green]")
+    if summary.scope_changes:
+        console.print(f"  ({summary.scope_changes} scope changes, {summary.summary_edits} summary edits)")
+
+
+@main.command()
+@click.option("--project", "-p", default=None, help="Project ID (overrides config)")
+@click.option("--target", default=".", type=click.Path(exists=True), help="Project directory")
 @click.option("--no-team", is_flag=True, help="Skip team-scope nodes")
 def pull(project, target, no_team):
     """Pull approved nodes from the shared store into the local cache."""
