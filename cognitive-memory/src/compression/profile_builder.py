@@ -15,6 +15,7 @@ from ..schemas.memory import (
     DiagnosticStrategy,
     Pitfall,
 )
+from ..schemas.reasoning import MemoryScope
 from ..store.vector_store import MemoryStore
 
 _MODEL = "claude-sonnet-4-6"
@@ -37,9 +38,18 @@ Classify as ONE of:
 - PITFALL: A recurring problem or trap that agents fall into
 - DIAGNOSTIC_STRATEGY: A debugging/investigation approach that proved effective
 
+Also classify the SCOPE of this knowledge:
+- "project": specific to THIS project's architecture, schema, configuration, or
+  conventions. The insight only applies to this codebase. (e.g., "Pydantic models
+  in this repo must be registered in models/__init__.py for Alembic to detect them")
+- "team": general technical knowledge that applies across ANY project using the
+  same tools or frameworks. (e.g., "Pydantic v2 requires migrating from class
+  Config to model_config = ConfigDict(...)")
+
 Then respond with JSON only (no markdown):
 {{
   "type": "ARCHITECTURAL_INSIGHT" | "PITFALL" | "DIAGNOSTIC_STRATEGY",
+  "scope": "project" | "team",
 
   // If ARCHITECTURAL_INSIGHT:
   "component": "which component or subsystem",
@@ -207,12 +217,18 @@ class ProfileBuilder:
                 continue
             ctype = data.get("type", "")
             srcs = data.get("source_sessions", [])
+            scope_str = str(data.get("scope", "project")).lower()
+            try:
+                scope = MemoryScope(scope_str)
+            except ValueError:
+                scope = MemoryScope.PROJECT
 
             if ctype == "ARCHITECTURAL_INSIGHT":
                 insights.append(ArchitecturalInsight(
                     component=data.get("component", "unknown"),
                     insight=data.get("insight", ""),
                     confidence=float(data.get("confidence", 0.5)),
+                    scope=scope,
                 ))
             elif ctype == "PITFALL":
                 pitfalls.append(Pitfall(
@@ -220,6 +236,7 @@ class ProfileBuilder:
                     frequency=len(srcs),
                     severity=data.get("severity", "medium"),
                     resolution_strategy=data.get("resolution_strategy"),
+                    scope=scope,
                 ))
             elif ctype == "DIAGNOSTIC_STRATEGY":
                 strategies.append(DiagnosticStrategy(
@@ -227,6 +244,7 @@ class ProfileBuilder:
                     steps=data.get("steps", []),
                     success_rate=float(data.get("success_rate", 0.5)),
                     source_sessions=srcs,
+                    scope=scope,
                 ))
 
         # Sort pitfalls by severity

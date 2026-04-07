@@ -12,6 +12,12 @@ class NodeType(str, Enum):
     CONTEXT_LOAD = "context_load"       # agent reads/understands code
 
 
+class MemoryScope(str, Enum):
+    """Whether a memory is project-specific or applies team-wide."""
+    PROJECT = "project"     # specific to one repo's architecture/config
+    TEAM = "team"           # general knowledge applicable across repos
+
+
 class ReasoningNode(BaseModel):
     """Single node in the reasoning DAG."""
     node_id: str
@@ -20,6 +26,7 @@ class ReasoningNode(BaseModel):
     evidence: str                       # what triggered this node
     message_range: tuple[int, int]      # indices into session messages
     confidence: float = 0.0            # how certain the extraction is
+    scope: MemoryScope = MemoryScope.PROJECT  # default: project-specific
 
 
 class ReasoningEdge(BaseModel):

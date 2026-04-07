@@ -87,6 +87,12 @@ class MemoryStore:
                 "msg_start": n.message_range[0],
                 "msg_end": n.message_range[1],
                 "is_pivot": n.node_id in dag.pivot_nodes,
+                # Sync / scope metadata (Phase 2-5)
+                "scope": n.scope.value,
+                "pushed_at": "",          # empty until cmm push runs
+                "approved": False,         # only meaningful in shared collections
+                "approved_by": "",
+                "source_developer": os.environ.get("CMM_DEVELOPER_NAME", ""),
             }
             for n in dag.nodes
         ]
@@ -108,11 +114,25 @@ class MemoryStore:
         project_id: str | None = None,
         top_k: int = 5,
         min_confidence: float = 0.0,
+        scope: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Semantic search over stored reasoning nodes."""
-        where: dict | None = None
+        """Semantic search over stored reasoning nodes.
+
+        Args:
+            scope: optional filter — "project", "team", or None (both).
+        """
+        where_clauses: list[dict] = []
         if project_id:
-            where = {"project_id": project_id}
+            where_clauses.append({"project_id": project_id})
+        if scope:
+            where_clauses.append({"scope": scope})
+
+        if len(where_clauses) > 1:
+            where = {"$and": where_clauses}
+        elif where_clauses:
+            where = where_clauses[0]
+        else:
+            where = None
 
         embedding = self.embed([query])[0]
         results = self.nodes_col.query(
