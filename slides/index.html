@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cognitive Memory Manager — Applied ML Conference</title>
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=clash-display@600,700&f[]=jetbrains-mono@400,600&f[]=satoshi@400,500,700&display=swap">
+<style>
+:root {
+  --bg-primary: #0a0f1c;
+  --bg-secondary: #111827;
+  --bg-card: #151c2e;
+  --text-primary: #e8ecf4;
+  --text-secondary: #94a3b8;
+  --text-dim: #64748b;
+  --accent: #00ffcc;
+  --accent-glow: rgba(0, 255, 204, 0.25);
+  --accent-2: #a78bfa;
+  --accent-3: #f59e0b;
+  --accent-4: #f87171;
+  --border: rgba(148, 163, 184, 0.12);
+
+  --font-display: 'Clash Display', sans-serif;
+  --font-body: 'Satoshi', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --title-size: clamp(2rem, 6vw, 5rem);
+  --h2-size: clamp(1.5rem, 4vw, 3rem);
+  --h3-size: clamp(1rem, 2vw, 1.5rem);
+  --body-size: clamp(0.75rem, 1.2vw, 1rem);
+  --small-size: clamp(0.65rem, 1vw, 0.85rem);
+
+  --slide-padding: clamp(1.5rem, 4vw, 4rem);
+  --content-gap: clamp(0.75rem, 2vw, 1.75rem);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-normal: 0.7s;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  overflow-x: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+html {
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+}
+
+.slide {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding: var(--slide-padding);
+}
+
+.slide-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+/* Background grid */
+.slide::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(148,163,184,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,184,0.04) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.slide > * { position: relative; z-index: 1; }
+
+/* Reveal animations */
+.reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity var(--duration-normal) var(--ease-out-expo),
+              transform var(--duration-normal) var(--ease-out-expo);
+}
+.slide.visible .reveal { opacity: 1; transform: translateY(0); }
+.slide.visible .reveal:nth-child(1) { transition-delay: 0.05s; }
+.slide.visible .reveal:nth-child(2) { transition-delay: 0.15s; }
+.slide.visible .reveal:nth-child(3) { transition-delay: 0.25s; }
+.slide.visible .reveal:nth-child(4) { transition-delay: 0.35s; }
+.slide.visible .reveal:nth-child(5) { transition-delay: 0.45s; }
+.slide.visible .reveal:nth-child(6) { transition-delay: 0.55s; }
+
+/* Typography */
+h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.02em; }
+h1 { font-size: var(--title-size); line-height: 1.05; }
+h2 { font-size: var(--h2-size); line-height: 1.1; margin-bottom: clamp(1rem, 2vw, 2rem); }
+h3 { font-size: var(--h3-size); line-height: 1.2; }
+
+.tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--small-size);
+  color: var(--accent);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-glow);
+}
+
+p { font-size: var(--body-size); line-height: 1.55; color: var(--text-secondary); }
+strong { color: var(--text-primary); font-weight: 700; }
+.mono { font-family: var(--font-mono); }
+
+/* ─── Title slide ───────────────────────────── */
+.title-slide { justify-content: center; align-items: flex-start; }
+.title-slide h1 {
+  font-size: clamp(2.5rem, 9vw, 7rem);
+  background: linear-gradient(135deg, #fff 0%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 1rem 0;
+}
+.title-slide .subtitle {
+  font-size: clamp(1rem, 2vw, 1.5rem);
+  color: var(--text-secondary);
+  max-width: 60ch;
+  margin-bottom: 2rem;
+}
+.title-slide .author {
+  font-family: var(--font-mono);
+  font-size: var(--small-size);
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+}
+.title-slide .author span { color: var(--accent); }
+
+/* ─── Generic two-column ─────────────────────── */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(1rem, 3vw, 3rem);
+  align-items: center;
+}
+@media (max-width: 800px) {
+  .two-col { grid-template-columns: 1fr; }
+}
+
+/* ─── Cards ──────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: clamp(1rem, 2vw, 1.75rem);
+  position: relative;
+}
+.card.accent { border-color: rgba(0, 255, 204, 0.25); }
+.card h3 { color: var(--text-primary); margin-bottom: 0.5rem; }
+.card p { font-size: var(--small-size); }
+.card .label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: clamp(0.75rem, 1.5vw, 1.25rem);
+}
+
+/* ─── Pipeline diagram ─────────────────────── */
+.pipeline {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 1rem;
+}
+.pipeline .stage {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-family: var(--font-mono);
+  font-size: var(--small-size);
+  color: var(--text-primary);
+  min-width: 110px;
+  text-align: center;
+}
+.pipeline .stage.warm { border-color: var(--accent-3); color: var(--accent-3); }
+.pipeline .stage.cold { border-color: var(--accent); color: var(--accent); }
+.pipeline .stage.store { border-color: var(--accent-2); color: var(--accent-2); }
+.pipeline .arrow {
+  display: flex; align-items: center; color: var(--text-dim); font-size: 1.2rem;
+}
+
+/* ─── Stats ──────────────────────────────────── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: clamp(1rem, 2vw, 2rem);
+  margin-top: 1rem;
+}
+.stat {
+  text-align: left;
+}
+.stat .num {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5vw, 4rem);
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+.stat .num.alt { color: var(--accent-2); }
+.stat .num.warn { color: var(--accent-3); }
+.stat .label {
+  font-size: var(--small-size);
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+  display: block;
+}
+
+/* ─── Code block ─────────────────────────────── */
+.code {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: clamp(0.75rem, 1.5vw, 1.25rem);
+  font-family: var(--font-mono);
+  font-size: var(--small-size);
+  color: var(--text-primary);
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+}
+.code .kw { color: var(--accent-2); }
+.code .str { color: var(--accent); }
+.code .com { color: var(--text-dim); }
+.code .num { color: var(--accent-3); }
+
+/* ─── Bullet list ─���──────────────────────────── */
+.bullets {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.5rem, 1vw, 1rem);
+}
+.bullets li {
+  font-size: var(--body-size);
+  color: var(--text-secondary);
+  padding-left: 1.5rem;
+  position: relative;
+  line-height: 1.5;
+}
+.bullets li::before {
+  content: '▸';
+  color: var(--accent);
+  position: absolute;
+  left: 0;
+  font-family: var(--font-mono);
+}
+
+/* ─── Comparison table ───────────────────────── */
+.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.compare .col {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: clamp(1rem, 2vw, 1.5rem);
+}
+.compare .col.warm { border-top: 3px solid var(--accent-3); }
+.compare .col.cold { border-top: 3px solid var(--accent); }
+.compare .col h3 { margin-bottom: 0.75rem; }
+.compare .col .meta {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  display: block;
+  margin-bottom: 0.75rem;
+}
+
+/* ─── Node type legend ───────────────────────── */
+.node-types {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+.node-type {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+.node-type .dot {
+  width: 10px; height: 10px; border-radius: 50%;
+}
+
+/* ─── Progress bar ───────────────────────────── */
+.progress-bar {
+  position: fixed;
+  top: 0; left: 0;
+  height: 3px;
+  background: var(--accent);
+  width: 0%;
+  z-index: 100;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* ─── Slide number ───────────────────────────── */
+.slide-num {
+  position: absolute;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  z-index: 2;
+}
+
+/* ─── Nav dots ───────────────────────────────── */
+.nav-dots {
+  position: fixed;
+  right: 1.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  z-index: 50;
+}
+.nav-dots .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(148,163,184,0.3);
+  cursor: pointer;
+  transition: all 0.3s;
+  border: none;
+  padding: 0;
+}
+.nav-dots .dot.active {
+  background: var(--accent);
+  transform: scale(1.4);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* Hint */
+.hint {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 1.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+  z-index: 50;
+}
+
+@media (max-height: 700px) {
+  :root {
+    --slide-padding: clamp(1rem, 3vw, 2.5rem);
+    --content-gap: clamp(0.5rem, 1.5vw, 1rem);
+  }
+}
+@media (max-height: 600px) {
+  .nav-dots, .hint, .slide-num { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="progress-bar"></div>
+<nav class="nav-dots"></nav>
+<div class="hint">↓ scroll · → arrow · space</div>
+
+<!-- ════════ SLIDE 1: TITLE ════════ -->
+<section class="slide title-slide">
+  <span class="tag reveal">Applied ML Conference 2026</span>
+  <h1 class="reveal">Cognitive<br>Memory<br>Manager</h1>
+  <p class="subtitle reveal">Persistent reasoning memory for AI coding agents — capture, consolidate, and retrieve insights across sessions.</p>
+  <p class="author reveal">Sazan Khalid · <span>github.com/sazandkhalid/cmm</span></p>
+  <div class="slide-num">01 / 11</div>
+</section>
+
+<!-- ════════ SLIDE 2: PROBLEM ════════ -->
+<section class="slide">
+  <div class="slide-content">
+    <span class="tag reveal">The Problem</span>
+    <h2 class="reveal">Coding agents have amnesia.</h2>
+    <div class="two-col">
+      <div class="reveal">
+        <p>Every Claude Code session starts from scratch. The agent reads the same files, hits the same dead ends, and rediscovers the same architectural quirks — over and over.</p>
+        <br>
+        <p>The reasoning that produced last week's fix is locked inside a JSONL transcript that no one reads.</p>
+      </div>
+      <ul class="bullets reveal">
+        <li>No memory of past dead-ends or pivots</li>
+        <li>No accumulated knowledge of project quirks</li>
+        <li>No diagnostic patterns from prior debugging</li>
+        <li>Every agent is a new hire on day one</li>
+      </ul>
+    </div>
+  </div>
+  <div class="slide-num">02 / 11</div>
+</section>
+
+<!-- ════════ SLIDE 3: APPROACH ════════ -->
+<section class="slide">
+  <div class="slide-content">
+    <span class="tag reveal">The Approach</span>
+    <h2 class="reveal">Treat each session as a reasoning trace.</h2>
+    <p class="reveal" style="max-width: 70ch; margin-bottom: 2rem;">Extract a <strong>reasoning DAG</strong> from every session — nodes for hypotheses, dead ends, pivots, discoveries, and solutions. Cluster across sessions to distill durable knowledge: insights, pitfalls, diagnostic strategies.</p>
+    <div class="pipeline reveal">
+      <div class="stage">Session<br>JSONL</div>
+      <div class="arrow">→</div>
+      <div class="stage warm">Warm<br>Extract</div>
+      <div class="arrow">→</div>
+      <div class="stage cold">Cold<br>Extract</div>
+      <div class="arrow">→</div>
+      <div class="stage store">Vector<br>Store</div>
+      <div class="arrow">→</div>
+      <div class="stage">Cognitive<br>Profile</div>
+      <div class="arrow">→</div>
+      <div class="stage">Future<br>Sessions</div>
+    </div>
+  </div>
+  <div class="slide-num">03 / 11</div>
+</section>
+
+<!-- ════════ SLIDE 4: REASONING DAG ════════ -->
+<section class="slide">
+  <div class="slide-content">
+    <span class="tag reveal">Reasoning DAG</span>
+    <h2 class="reveal">Sessions become typed graphs.</h2>
+    <div class="two-col">
+      <div class="reveal">
+        <p>Each node represents one reasoning activity. Edges capture causal relationships: <span class="mono" style="color:var(--accent)">led_to</span>, <span class="mono" style="color:var(--accent)">refined</span>, <span class="mono" style="color:var(--accent)">caused_pivot_to</span>.</p>
+        <br>
+        <p>Pivots and dead ends are first-class — they're often the most valuable signals for future sessions.</p>
+      </div>
+      <div class="node-types reveal">
+        <div class="node-type"><span class="dot" style="background:#3b82f6"></span>HYPOTHESIS</div>
+        <div class="node-type"><span class="dot" style="background:#8b5cf6"></span>INVESTIGATION</div>
+        <div class="node-type"><span class="dot" style="background:#10b981"></span>DISCOVERY</div>
+        <div class="node-type"><span class="dot" style="background:#f59e0b"></span>PIVOT</div>
+        <div class="node-type"><span class="dot" style="background:#ef4444"></span>DEAD END</div>
+        <div class="node-type"><span class="dot" style="background:#22c55e"></span>SOLUTION</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">04 / 11</div>
+</section>
+
+<!-- ════════ SLIDE 5: TWO TIERS ════════ -->
+<section class="slide">
+  <div class="slide-content">
+    <span class="tag reveal">Two-Tier Extraction</span>
+    <h2 class="reveal">Always-on speed, on-demand quality.</h2>
+    <div class="compare">
+      <div class="col warm reveal">
+        <span class="meta">Tier 1 · Real-time</span>
+        <h3>Warm Extractor</h3>
+        <p style="font-size: var(--small-size); margin: 0.75rem 0;">Regex heuristics: keyword scoring, error-resolution pairing, explicit conclusion detection. Three strategies merged with corroboration boost.</p>
+        <ul class="bullets" style="margin-top: 0.75rem;">
+          <li>&lt; 1 second per session</li>
+          <li>Zero API cost</li>
+          <li>Confidence: 0.25 – 0.75</li>
+          <li>Runs on every session-end</li>
+        </ul>
+      </div>
+      <div class="col cold reveal">
+        <span class="meta">Tier 2 · Batch consolidation</span>
+        <h3>Cold Extractor</h3>
+        <p style="font-size: var(--small-size); margin: 0.75rem 0;">Claude Sonnet 4.6 classifies overlapping 5-message windows. A second pass infers semantic edges between nodes.</p>
+        <ul class="bullets" style="margin-top: 0.75rem;">
+          <li>Concurrent LLM calls</li>
+          <li>Confidence: 0.5 – 0.95</li>
+          <li>Replaces warm nodes via dedup</li>
+          <li>Runs nightly or on demand</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">05 / 11</div>
+</section>
+
+<!-- ════════ SLIDE 6: PROFILE BUILDING ════════ -->
+<section class="slide">
+  <div class="slide-content">
+    <span class="tag reveal">Knowledge Distillation</span>
+    <h2 class="reveal">From nodes to durable knowledge.</h2>
+    <div class="two-col">
+      <div class="reveal">
+        <p>Agglomerative clustering on sentence embeddings groups semantically similar reasoning across sessions. Each cluster is classified by an LLM into one of three knowledge types.</p>
+        <br>
+        <p>Semantic deduplication (cosine ≥ 0.85) prevents memory pollution as the store grows.</p>
+      </div>
+      <div class="card-grid reveal">
+        <div class="card accent">
+          <span class="label">Insight</span>
+          <h3>Architectural</h3>
+          <p>Recurring structural understanding of the codebase</p>
+        </div>
+        <div class="card" style="border-color: rgba(248,113,113,0.3)">
+          <span class="label" style="color: var(--accent-4)">Pitfall</span>
+          <h3>Known Trap</h3>
+          <p>Problems seen before, ranked by severity</p>
+        </div>
+        <div class="card" style="border-color: rgba(167,139,250,0.3)">
+          <span class="label" style="color: var(--accent-2)">Strategy</span>
+          <h3>Diagnostic</h3>
+          <p>Proven debugging steps for recurring problems</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">06 / 11</div>
+</section>
+
+<!-- ════════ SLIDE 7: AUTO-DISCOVERY ════════ -->
+<section class="slide">
+  <div class="slide-content">
+    <span class="tag reveal">Auto-Discovery</span>
+    <h2 class="reveal">Projects describe themselves.</h2>
+    <div class="two-col">
+      <div class="reveal">
+        <p>A <span class="mono" style="color:var(--accent)">.cognitive/</span> folder in the repo root makes the project self-describing. Stable project IDs from <span class="mono">repo_name + sha256(README)[:6]</span> work across machines without hardcoding.</p>
+        <br>
+        <p>Session-start hooks load the cached profile in &lt;500ms — no ChromaDB query, no API call.</p>
+      </div>
+      <div class="code reveal"><span class="com"># .cognitive/</span>
+├── manifest.json       <span class="com"># project identity</span>
+├── config.json         <span class="com"># auto_ingest, thresholds</span>
+├── cached_profile.md   <span class="com"># fast-load snapshot</span>
+└── llms.txt            <span class="com"># agent-readable metadata</span>
+
+<span class="kw">$</span> cmm init .
+<span class="str">Initialized: supply-chain-a3f2b1</span>
+
+<span class="kw">$</span> cmm hook start
+<span class="str">→ context injected (12 nodes, 3 sessions)</span></div>
+    </div>
+  </div>
+  <div class="slide-num">07 / 11</div>
+</section>
+
+<!-- ════════ SLIDE 8: DELIVERY ════════ -->
+<section class="slide">
+  <div class="slide-content">
+    <span class="tag reveal">Delivery</span>
+    <h2 class="reveal">Memory as a slash command.</h2>
+    <p class="reveal" style="max-width: 65ch; margin-bottom: 1.5rem;">Seven Claude Code skills surface memory inline. Every invocation logs to SQLite for evaluation — fail-safe, &lt;5ms overhead.</p>
+    <div class="card-grid reveal">
+      <div class="card">
+        <span class="label">/cognitive-profile</span>
+        <p>Load the full distilled profile</p>
+      </div>
+      <div class="card">
+        <span class="label">/search-memory</span>
+        <p>Semantic search over reasoning fragments</p>
+      </div>
+      <div class="card">
+        <span class="label">/pitfalls</span>
+        <p>Ranked list of known traps</p>
+      </div>
+      <div class="card">
+        <span class="label">/diagnose</span>
+        <p>Proven debugging strategies for a problem</p>
+      </div>
+      <div class="card">
+        <span class="label">/consolidate</span>
+        <p>Trigger cold-tier rebuild</p>
+      </div>
+      <div class="card">
+        <span class="label">/visualize-dag</span>
+        <p>Interactive reasoning graph</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">08 / 11</div>
+</section>
+
+<!-- ════════ SLIDE 9: EVALUATION ════════ -->
+<section class="slide">
+  <div class="slide-content">
+    <span class="tag reveal">Evaluation</span>
+    <h2 class="reveal">Three signals for helpfulness.</h2>
+    <div class="card-grid reveal">
+      <div class="card accent">
+        <span class="label">Signal A</span>
+        <h3>Errors Resolved</h3>
+        <p>DEAD_END → memory retrieval → SOLUTION within 8 messages. Did memory help fix it?</p>
+      </div>
+      <div class="card accent">
+        <span class="label">Signal B</span>
+        <h3>Pitfalls Avoided</h3>
+        <p>Surfaced pitfall has no matching DEAD_END node in the session. Was the trap dodged?</p>
+      </div>
+      <div class="card accent">
+        <span class="label">Signal C</span>
+        <h3>Pivots After Retrieval</h3>
+        <p>PIVOT node within 5 messages of a search. Did memory change direction?</p>
+      </div>
+    </div>
+    <p class="reveal" style="margin-top: 1.5rem; font-size: var(--small-size); color: var(--text-dim);">Sessions split by <span class="mono">memory_used_at_start</span> — compare dead ends, pivots, messages-to-solution between cohorts.</p>
+  </div>
+  <div class="slide-num">09 / 11</div>
+</section>
+
+<!-- ════════ SLIDE 10: METRICS ════════ -->
+<section class="slide">
+  <div class="slide-content">
+    <span class="tag reveal">Current State</span>
+    <h2 class="reveal">Phases 0 – 5 shipped.</h2>
+    <div class="stat-grid reveal">
+      <div class="stat">
+        <div class="num">46</div>
+        <span class="label">Tests passing across all phases</span>
+      </div>
+      <div class="stat">
+        <div class="num alt">7</div>
+        <span class="label">Claude Code skills</span>
+      </div>
+      <div class="stat">
+        <div class="num warn">&lt;1s</div>
+        <span class="label">Warm extraction per session</span>
+      </div>
+      <div class="stat">
+        <div class="num">&lt;500ms</div>
+        <span class="label">Session-start retrieval latency</span>
+      </div>
+    </div>
+    <br>
+    <ul class="bullets reveal" style="margin-top: 1rem;">
+      <li><strong>Stack:</strong> Python 3.12, Pydantic v2, ChromaDB, OpenAI embeddings, Anthropic SDK, FastMCP, scikit-learn</li>
+      <li><strong>Platform-agnostic schema</strong> — extensible beyond Claude Code</li>
+      <li><strong>Fail-safe by design</strong> — logging never blocks retrieval, evaluation never blocks ingestion</li>
+    </ul>
+  </div>
+  <div class="slide-num">10 / 11</div>
+</section>
+
+<!-- ════════ SLIDE 11: CLOSE ════════ -->
+<section class="slide">
+  <div class="slide-content" style="justify-content: center; align-items: center; text-align: center;">
+    <span class="tag reveal">Thank You</span>
+    <h1 class="reveal" style="font-size: clamp(2rem, 7vw, 5rem); background: linear-gradient(135deg, #fff 0%, var(--accent) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Memory makes<br>agents better<br>collaborators.</h1>
+    <p class="reveal" style="max-width: 55ch; margin: 1.5rem 0;">Open source. MIT licensed. Plug into any Claude Code project today.</p>
+    <p class="author reveal mono" style="font-size: var(--small-size); color: var(--text-dim);">github.com/sazandkhalid/cmm · Sazan Khalid</p>
+  </div>
+  <div class="slide-num">11 / 11</div>
+</section>
+
+<script>
+class SlidePresentation {
+  constructor() {
+    this.slides = Array.from(document.querySelectorAll('.slide'));
+    this.current = 0;
+    this.observer();
+    this.keys();
+    this.progress();
+    this.dots();
+  }
+  observer() {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.intersectionRatio > 0.5) {
+          e.target.classList.add('visible');
+          this.current = this.slides.indexOf(e.target);
+          this.updateDots();
+          this.updateProgress();
+        }
+      });
+    }, { threshold: [0, 0.5, 1] });
+    this.slides.forEach(s => io.observe(s));
+  }
+  keys() {
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault(); this.go(this.current + 1);
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault(); this.go(this.current - 1);
+      } else if (e.key === 'Home') { this.go(0); }
+      else if (e.key === 'End') { this.go(this.slides.length - 1); }
+    });
+  }
+  go(i) {
+    if (i < 0 || i >= this.slides.length) return;
+    this.slides[i].scrollIntoView({ behavior: 'smooth' });
+  }
+  progress() {
+    this.bar = document.querySelector('.progress-bar');
+  }
+  updateProgress() {
+    const pct = ((this.current + 1) / this.slides.length) * 100;
+    this.bar.style.width = pct + '%';
+  }
+  dots() {
+    const nav = document.querySelector('.nav-dots');
+    this.slides.forEach((_, i) => {
+      const b = document.createElement('button');
+      b.className = 'dot';
+      b.setAttribute('aria-label', `Slide ${i + 1}`);
+      b.addEventListener('click', () => this.go(i));
+      nav.appendChild(b);
+    });
+    this.dotEls = nav.querySelectorAll('.dot');
+    this.updateDots();
+  }
+  updateDots() {
+    this.dotEls.forEach((d, i) => d.classList.toggle('active', i === this.current));
+  }
+}
+new SlidePresentation();
+</script>
+</body>
+</html>
