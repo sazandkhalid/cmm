@@ -7,5 +7,7 @@ __pycache__/
 .Rhistory
 data/memory_store/
 cognitive-memory/data/memory_store/
+cognitive-memory/data/demo_store/
 cognitive-memory/data/eval/
+cognitive-memory/data/sync/
 .cognitive/
