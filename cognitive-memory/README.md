@@ -31,14 +31,27 @@ The demo ingests 10 included fixture sessions, extracts reasoning DAGs,
 builds a cognitive profile, runs a search query, and generates an
 interactive HTML visualization — all in one command.
 
+No API keys? Run parse-only mode (zero API calls):
+
+```bash
+python scripts/demo.py --parse-only
+```
+
+Clean up demo artifacts afterward:
+
+```bash
+python scripts/demo.py --clean
+```
+
 ## Prerequisites
 
 - **Python 3.12+**
 - **OpenAI API key** — used for `text-embedding-3-small` embeddings
   (required for ingestion, search, and profile building)
 - **Anthropic API key** (optional) — used for cold-tier LLM extraction
-  and profile building. Without it, the system uses warm-tier heuristic
-  extraction only (still useful, just lower confidence).
+  (Claude Sonnet 4.5/4.6) and profile building. Without it, the system
+  uses warm-tier heuristic extraction only (still useful, just lower
+  confidence).
 
 ## Installation
 
@@ -182,6 +195,54 @@ Every memory is classified as:
 
 Team-scope memories cross project boundaries automatically on `cmm pull`.
 
+### Evaluation
+
+The system tracks four helpfulness signals automatically:
+
+| Signal | What it measures |
+|--------|-----------------|
+| **A: Errors Resolved** | DEAD_END → memory retrieval → SOLUTION within 8 messages |
+| **B: Pitfalls Avoided** | Surfaced pitfall has no matching DEAD_END (embedding cosine >= 0.70) |
+| **C: Pivots After Retrieval** | PIVOT within 5 messages of a /search-memory invocation |
+| **D: Harmful Memory** | Loaded memory semantically matches a subsequent DEAD_END — memory may have misled |
+
+Signal B uses embedding similarity (not word overlap) for accurate
+matching. Signal D is a false-positive tracker — it catches cases where
+memory actively pointed the agent in the wrong direction.
+
+Position estimation uses real JSONL message counts at invocation time
+(not even-distribution guesses).
+
+**Profile quality metrics** run automatically after every ingestion when
+a profile exists (no API key needed):
+- **Staleness** — do file paths referenced in insights still exist?
+- **Redundancy** — pairwise cosine > 0.85 among profile entries?
+- **Coverage** — ratio of contributing sessions vs total ingested
+
+### Controlled A/B Comparison
+
+Compare two sessions or two built profiles directly:
+
+```bash
+# Compare two profiles head-to-head (no extraction needed)
+python scripts/controlled_comparison.py \
+    --compare-profiles my-project-baseline my-project-assisted
+
+# Compare two session transcripts with cold-tier extraction
+python scripts/controlled_comparison.py \
+    --project my-project \
+    --prompt "Fix the failing test" \
+    --baseline-session path/to/baseline.jsonl \
+    --assisted-session path/to/assisted.jsonl \
+    --cold
+
+# Generate prompts for a fresh A/B test (dry run)
+python scripts/controlled_comparison.py \
+    --project my-project \
+    --prompt "Fix the failing test" \
+    --dry-run
+```
+
 ## CLI Reference
 
 ```
@@ -244,14 +305,14 @@ cognitive-memory/
 │   ├── store/                # ChromaDB vector store (local + shared)
 │   ├── delivery/             # MCP server + CLI query interface
 │   ├── discovery/            # .cognitive/ folder + hooks + llms.txt
-│   ├── evaluation/           # Session analysis + interaction logging
+│   ├── evaluation/           # Session analysis, interaction logging, profile quality
 │   ├── sync/                 # Push/pull/review for shared mode
 │   └── cli.py                # Click CLI entry point
 ├── scripts/
-│   ├── demo.py               # End-to-end demo on fixture data
+│   ├── demo.py               # End-to-end demo (--parse-only, --clean)
 │   ├── ingest.py             # Batch ingestion
 │   ├── batch_consolidate.py  # Cold-tier consolidation
-│   ├── controlled_comparison.py  # A/B memory evaluation
+│   ├── controlled_comparison.py  # A/B comparison (--cold, --compare-profiles)
 │   ├── eval_report.py        # Evaluation dashboard
 │   └── visualize_dag.py      # DAG visualization generator
 ├── fixtures/                 # 10 sample session transcripts
