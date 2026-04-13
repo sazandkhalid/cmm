@@ -1,20 +1,29 @@
 """Vector store backed by ChromaDB with OpenAI text-embedding-3-small embeddings.
 
-Supports two operating modes:
+Supports three operating modes:
 
   LOCAL mode (default, backwards-compatible):
       MemoryStore(local_path="data/memory_store")
       All reads/writes go to one ChromaDB directory.
 
-  SHARED mode (Phase 3):
+  SHARED mode — filesystem (Phase 3):
       MemoryStore(local_path="data/memory_store",
                   shared_path="/team/shared/memory_store")
-      A second ChromaDB instance acts as the team-wide shared store.
-      The shared store has TWO collections per node type: a "main"
-      collection (approved nodes, served to retrievals) and a
-      "staging" collection (pending review).
+      A second local ChromaDB instance acts as the team-wide shared store.
 
-The legacy `persist_dir=` kwarg still works and is treated as `local_path`.
+  SHARED mode — Chroma Cloud:
+      MemoryStore(local_path="data/memory_store",
+                  cloud_tenant="b8446dcc-...",
+                  cloud_database="cmm")
+      The shared store is hosted on Chroma Cloud.  The API key is read
+      from the ``cloud_api_key`` parameter or the ``CMM_CHROMA_API_KEY``
+      environment variable.
+
+The shared store has TWO collections per node type: a "main" collection
+(approved nodes, served to retrievals) and a "staging" collection
+(pending review).
+
+The legacy ``persist_dir=`` kwarg still works and is treated as ``local_path``.
 """
 from __future__ import annotations
 
@@ -51,6 +60,10 @@ class MemoryStore:
         self,
         local_path: str | Path | None = None,
         shared_path: str | Path | None = None,
+        # Chroma Cloud shared store (takes priority over shared_path)
+        cloud_api_key: str | None = None,
+        cloud_tenant: str | None = None,
+        cloud_database: str | None = None,
         embedding_model: str = _DEFAULT_MODEL,
         api_key: str | None = None,
         # Backwards-compat: old call sites use persist_dir=...
@@ -81,17 +94,37 @@ class MemoryStore:
         )
 
         # ── Shared client (optional) ───────────────────────────────
-        self.client_shared: chromadb.PersistentClient | None = None
+        self.client_shared: Any = None
         self.nodes_col_shared: Any = None
         self.staging_col_shared: Any = None
         self.profiles_col_shared: Any = None
+        self._cloud_mode: bool = False
 
-        if self._shared_path:
+        # Cloud takes priority over filesystem shared path
+        _cloud_tenant = cloud_tenant or os.environ.get("CMM_CHROMA_TENANT")
+        _cloud_database = cloud_database or os.environ.get("CMM_CHROMA_DATABASE")
+        _cloud_api_key = cloud_api_key or os.environ.get("CMM_CHROMA_API_KEY")
+
+        if _cloud_tenant and _cloud_database:
+            if not _cloud_api_key:
+                raise ValueError(
+                    "Chroma Cloud mode requires cloud_api_key or "
+                    "CMM_CHROMA_API_KEY environment variable"
+                )
+            self._cloud_mode = True
+            self.client_shared = chromadb.CloudClient(
+                api_key=_cloud_api_key,
+                tenant=_cloud_tenant,
+                database=_cloud_database,
+            )
+        elif self._shared_path:
             Path(self._shared_path).mkdir(parents=True, exist_ok=True)
             self.client_shared = chromadb.PersistentClient(
                 path=self._shared_path,
                 settings=Settings(anonymized_telemetry=False),
             )
+
+        if self.client_shared is not None:
             self.nodes_col_shared = self.client_shared.get_or_create_collection(
                 name=_COLLECTION_NODES,
                 metadata={"hnsw:space": "cosine"},

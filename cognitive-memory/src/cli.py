@@ -12,15 +12,26 @@ def main():
 @main.command()
 @click.argument("target", default=".", type=click.Path(exists=True))
 @click.option("--store-dir", default=None, help="Local ChromaDB store path")
-@click.option("--shared", "shared_path", default=None, help="Shared team store path (enables shared mode)")
+@click.option("--shared", "shared_path", default=None, help="Shared team store path (filesystem shared mode)")
 @click.option("--developer", default=None, help="Your name (for sync attribution)")
 @click.option("--team-id", default=None, help="Team identifier")
-def init(target, store_dir, shared_path, developer, team_id):
+@click.option("--cloud-tenant", default=None, envvar="CMM_CHROMA_TENANT",
+              help="Chroma Cloud tenant ID (enables cloud shared mode)")
+@click.option("--cloud-database", default=None, envvar="CMM_CHROMA_DATABASE",
+              help="Chroma Cloud database name (default: cmm)")
+def init(target, store_dir, shared_path, developer, team_id, cloud_tenant, cloud_database):
     """Initialize cognitive memory for a project.
 
-    Creates the .cognitive/ folder. With --shared, registers a team store
-    path and immediately runs cmm pull to populate the local cache from
-    existing approved team memories.
+    Creates the .cognitive/ folder. With --shared or --cloud-tenant/--cloud-database,
+    registers a team store and immediately runs cmm pull to populate the local
+    cache from existing approved team memories.
+
+    Chroma Cloud mode (recommended for teams):
+
+        cmm init . --cloud-tenant <tenant-id> --cloud-database cmm \\
+                   --developer alice
+
+        Set CMM_CHROMA_API_KEY in your environment before running.
     """
     from pathlib import Path
     import os
@@ -32,16 +43,24 @@ def init(target, store_dir, shared_path, developer, team_id):
     console = Console()
     project_dir = Path(target).resolve()
 
+    # Determine shared mode
+    _cloud_mode = bool(cloud_tenant and cloud_database)
+    _shared_mode = _cloud_mode or bool(shared_path)
+
     cognitive_dir = project_dir / ".cognitive"
     if (cognitive_dir / "manifest.json").exists():
         proj = CognitiveProject.load(project_dir)
         console.print(f"[yellow]Already initialized:[/yellow] {proj.project_id}")
         console.print(f"  .cognitive/ exists at {cognitive_dir}")
-        # If --shared was passed on a re-init, still update the config
-        if shared_path or developer or team_id:
+        # If --shared/--cloud was passed on a re-init, still update the config
+        if _shared_mode or developer or team_id:
             if shared_path:
                 proj.config["shared_store_path"] = shared_path
                 proj.config["mode"] = "shared"
+            if _cloud_mode:
+                proj.config["cloud_tenant"] = cloud_tenant
+                proj.config["cloud_database"] = cloud_database
+                proj.config["mode"] = "cloud"
             if developer:
                 proj.config["developer_name"] = developer
             if team_id:
@@ -52,10 +71,15 @@ def init(target, store_dir, shared_path, developer, team_id):
 
     proj = CognitiveProject.init(project_dir, store_path=store_dir)
 
-    # Stamp shared-mode config fields
+    # Stamp shared/cloud-mode config fields
     if shared_path:
         proj.config["shared_store_path"] = shared_path
         proj.config["mode"] = "shared"
+    if _cloud_mode:
+        proj.config["cloud_tenant"] = cloud_tenant
+        proj.config["cloud_database"] = cloud_database
+        proj.config["mode"] = "cloud"
+        # Note: API key is NOT stored in config — use CMM_CHROMA_API_KEY env var
     if developer:
         proj.config["developer_name"] = developer
     if team_id:
@@ -78,8 +102,12 @@ def init(target, store_dir, shared_path, developer, team_id):
     console.print(f"  Name:        {proj.name}")
     console.print(f"  Description: {proj.description[:80] or '(none)'}")
     console.print(f"  Directory:   {cognitive_dir}")
-    if shared_path:
-        console.print(f"  Mode:        [magenta]shared[/magenta]")
+    if _cloud_mode:
+        console.print(f"  Mode:        [magenta]cloud (Chroma Cloud)[/magenta]")
+        console.print(f"  Tenant:      [cyan]{cloud_tenant}[/cyan]")
+        console.print(f"  Database:    [cyan]{cloud_database}[/cyan]")
+    elif shared_path:
+        console.print(f"  Mode:        [magenta]shared (filesystem)[/magenta]")
         console.print(f"  Shared:      [cyan]{shared_path}[/cyan]")
     if developer:
         console.print(f"  Developer:   [cyan]{developer}[/cyan]")
@@ -90,31 +118,42 @@ def init(target, store_dir, shared_path, developer, team_id):
     console.print(f"  .cognitive/llms.txt")
     console.print(f"  .cognitive/cached_profile.md")
 
-    # If shared mode, immediately pull approved nodes from shared store
-    if shared_path:
+    # If shared/cloud mode, immediately pull approved nodes
+    if _shared_mode:
         console.print()
         console.print("[bold]Pulling existing team memories...[/bold]")
         try:
-            from src.store.vector_store import MemoryStore
             from src.sync.sync import Syncer
 
             local_path = store_dir or str(Path.home() / ".cognitive-memory" / "store")
-            store = MemoryStore(local_path=local_path, shared_path=shared_path)
-            syncer = Syncer(store=store, developer=developer or "")
-            result = syncer.pull(proj.project_id, include_team=True)
-            console.print(f"  [green]✓[/green] {result.summary}")
+            cloud_api_key = os.environ.get("CMM_CHROMA_API_KEY")
 
-            # Refresh cached_profile.md from any pulled profile
-            profile = store.get_profile(proj.project_id)
-            if profile:
-                from src.delivery.mcp_server import _fmt_profile
-                proj.update_cached_profile(_fmt_profile(profile))
-                console.print(f"  [green]✓[/green] Cached profile updated")
+            if _cloud_mode and not cloud_api_key:
+                console.print("  [yellow]CMM_CHROMA_API_KEY not set — skipping pull.[/yellow]")
+                console.print("  Set it and run [cyan]cmm pull[/cyan] to sync team memories.")
+            else:
+                cloud_creds = (
+                    {"api_key": cloud_api_key, "tenant": cloud_tenant, "database": cloud_database}
+                    if _cloud_mode else None
+                )
+                store = _make_store(local_path, shared_path, cloud_creds)
+                syncer = Syncer(store=store, developer=developer or "")
+                result = syncer.pull(proj.project_id, include_team=True)
+                console.print(f"  [green]✓[/green] {result.summary}")
+
+                profile = store.get_profile(proj.project_id)
+                if profile:
+                    from src.delivery.mcp_server import _fmt_profile
+                    proj.update_cached_profile(_fmt_profile(profile))
+                    console.print(f"  [green]✓[/green] Cached profile updated")
         except Exception as e:
             console.print(f"  [yellow]Pull skipped: {e}[/yellow]")
 
     console.print()
-    console.print("[dim]Add .cognitive/ to .gitignore if you don't want it tracked.[/dim]")
+    if _cloud_mode:
+        console.print("[dim]Ensure CMM_CHROMA_API_KEY is set before running cmm push/pull.[/dim]")
+    else:
+        console.print("[dim]Add .cognitive/ to .gitignore if you don't want it tracked.[/dim]")
 
 
 @main.command()
@@ -125,12 +164,11 @@ def init(target, store_dir, shared_path, developer, team_id):
 def classify(node_id, scope, target, project):
     """Reclassify a node's scope (project ↔ team)."""
     from rich.console import Console
-    from src.store.vector_store import MemoryStore
 
     console = Console()
-    project_id, local_path, shared_path, _ = _resolve_sync_paths(target, project)
+    project_id, local_path, shared_path, _, cloud_creds = _resolve_sync_paths(target, project)
 
-    store = MemoryStore(local_path=local_path, shared_path=shared_path)
+    store = _make_store(local_path, shared_path, cloud_creds)
     # Look up the node in local first
     try:
         existing = store.nodes_col_local.get(ids=[node_id], include=["metadatas"])
@@ -269,19 +307,19 @@ def status(target, project):
     console.print(table)
 
     # ── Sync status (only if shared mode is configured) ────────────
-    _, _, shared_path, developer = _resolve_sync_paths(target, project_id)
-    if shared_path:
+    _, _, shared_path, developer, cloud_creds = _resolve_sync_paths(target, project_id)
+    if shared_path or cloud_creds:
         try:
-            from src.store.vector_store import MemoryStore as MS
             from src.sync.sync import Syncer
-            shared_store = MS(local_path=store_path, shared_path=shared_path)
+            shared_store = _make_store(store_path, shared_path, cloud_creds)
             syncer = Syncer(store=shared_store, developer=developer)
             sync_status = syncer.status(project_id)
 
             sync_table = Table(title="Sync Status", show_header=True)
             sync_table.add_column("Metric", style="cyan")
             sync_table.add_column("Value")
-            sync_table.add_row("Mode", "[green]shared[/green]")
+            mode_label = "[magenta]cloud (Chroma Cloud)[/magenta]" if cloud_creds else "[green]shared (filesystem)[/green]"
+            sync_table.add_row("Mode", mode_label)
             sync_table.add_row("Developer", developer or "[dim]unset[/dim]")
             sync_table.add_row("Unpushed local nodes", str(sync_status["unpushed_nodes"]))
             sync_table.add_row("Approved in shared", str(sync_status["shared_approved"]))
@@ -463,8 +501,14 @@ def install(target, project, store_dir, python):
 
 
 def _resolve_sync_paths(target, project_id_arg):
-    """Resolve (project_id, local_path, shared_path, developer) from
-    .cognitive/config.json + env var overrides."""
+    """Resolve (project_id, local_path, shared_path, developer, cloud_creds) from
+    .cognitive/config.json + env var overrides.
+
+    cloud_creds is a dict with keys api_key, tenant, database when Chroma Cloud
+    is configured (tenant+database present + CMM_CHROMA_API_KEY set), else None.
+    When cloud_creds is returned, callers should pass it to MemoryStore and may
+    pass shared_path=None.
+    """
     from pathlib import Path
     import os, json
 
@@ -492,7 +536,35 @@ def _resolve_sync_paths(target, project_id_arg):
         or cfg.get("developer_name")
         or ""
     )
-    return project_id, local_path, shared_path, developer
+
+    # Chroma Cloud credentials — API key from env only (never stored in config)
+    cloud_tenant = os.environ.get("CMM_CHROMA_TENANT") or cfg.get("cloud_tenant")
+    cloud_database = os.environ.get("CMM_CHROMA_DATABASE") or cfg.get("cloud_database")
+    cloud_api_key = os.environ.get("CMM_CHROMA_API_KEY")  # env only
+
+    cloud_creds = None
+    if cloud_tenant and cloud_database and cloud_api_key:
+        cloud_creds = {
+            "api_key": cloud_api_key,
+            "tenant": cloud_tenant,
+            "database": cloud_database,
+        }
+
+    return project_id, local_path, shared_path, developer, cloud_creds
+
+
+def _make_store(local_path, shared_path, cloud_creds):
+    """Construct a MemoryStore, using Chroma Cloud if cloud_creds provided."""
+    from src.store.vector_store import MemoryStore
+
+    if cloud_creds:
+        return MemoryStore(
+            local_path=local_path,
+            cloud_api_key=cloud_creds["api_key"],
+            cloud_tenant=cloud_creds["tenant"],
+            cloud_database=cloud_creds["database"],
+        )
+    return MemoryStore(local_path=local_path, shared_path=shared_path)
 
 
 @main.command()
@@ -502,20 +574,19 @@ def _resolve_sync_paths(target, project_id_arg):
 def push(project, target, dry_run):
     """Push new local nodes to the shared staging area for review."""
     from rich.console import Console
-    from src.store.vector_store import MemoryStore
     from src.sync.sync import Syncer
 
     console = Console()
-    project_id, local_path, shared_path, developer = _resolve_sync_paths(target, project)
+    project_id, local_path, shared_path, developer, cloud_creds = _resolve_sync_paths(target, project)
 
     if not project_id:
         console.print("[red]No project ID. Pass --project or set CMM_PROJECT_ID.[/red]")
         return
-    if not shared_path:
-        console.print("[red]No shared store configured. Set shared_store_path in .cognitive/config.json or CMM_SHARED_STORE_PATH.[/red]")
+    if not shared_path and not cloud_creds:
+        console.print("[red]No shared store configured. Set CMM_CHROMA_TENANT/CMM_CHROMA_DATABASE/CMM_CHROMA_API_KEY for cloud, or CMM_SHARED_STORE_PATH for filesystem.[/red]")
         return
 
-    store = MemoryStore(local_path=local_path, shared_path=shared_path)
+    store = _make_store(local_path, shared_path, cloud_creds)
     syncer = Syncer(store=store, developer=developer)
     result = syncer.push(project_id, dry_run=dry_run)
 
@@ -541,17 +612,16 @@ def review(project, target, pending_count):
     from rich.panel import Panel
     from rich.prompt import Prompt
     from rich.table import Table
-    from src.store.vector_store import MemoryStore
     from src.sync.review import Reviewer, ReviewAction, ReviewDecision
 
     console = Console()
-    project_id, local_path, shared_path, developer = _resolve_sync_paths(target, project)
+    project_id, local_path, shared_path, developer, cloud_creds = _resolve_sync_paths(target, project)
 
-    if not shared_path:
-        console.print("[red]No shared store configured. Set shared_store_path in .cognitive/config.json or CMM_SHARED_STORE_PATH.[/red]")
+    if not shared_path and not cloud_creds:
+        console.print("[red]No shared store configured. Set CMM_CHROMA_TENANT/CMM_CHROMA_DATABASE/CMM_CHROMA_API_KEY for cloud, or CMM_SHARED_STORE_PATH for filesystem.[/red]")
         return
 
-    store = MemoryStore(local_path=local_path, shared_path=shared_path)
+    store = _make_store(local_path, shared_path, cloud_creds)
     reviewer = Reviewer(store=store, reviewer_name=developer or "anonymous")
 
     if pending_count:
@@ -634,20 +704,19 @@ def review(project, target, pending_count):
 def pull(project, target, no_team):
     """Pull approved nodes from the shared store into the local cache."""
     from rich.console import Console
-    from src.store.vector_store import MemoryStore
     from src.sync.sync import Syncer
 
     console = Console()
-    project_id, local_path, shared_path, developer = _resolve_sync_paths(target, project)
+    project_id, local_path, shared_path, developer, cloud_creds = _resolve_sync_paths(target, project)
 
     if not project_id:
         console.print("[red]No project ID. Pass --project or set CMM_PROJECT_ID.[/red]")
         return
-    if not shared_path:
-        console.print("[red]No shared store configured. Set shared_store_path in .cognitive/config.json or CMM_SHARED_STORE_PATH.[/red]")
+    if not shared_path and not cloud_creds:
+        console.print("[red]No shared store configured. Set CMM_CHROMA_TENANT/CMM_CHROMA_DATABASE/CMM_CHROMA_API_KEY for cloud, or CMM_SHARED_STORE_PATH for filesystem.[/red]")
         return
 
-    store = MemoryStore(local_path=local_path, shared_path=shared_path)
+    store = _make_store(local_path, shared_path, cloud_creds)
     syncer = Syncer(store=store, developer=developer)
     result = syncer.pull(project_id, include_team=not no_team)
 
