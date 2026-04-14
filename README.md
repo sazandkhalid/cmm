@@ -378,6 +378,42 @@ cmm visualize --project ID    Generate interactive DAG HTML
 cmm install TARGET -p ID      Install skills to .claude/commands/
 ```
 
+## Exploring the Memory Store
+
+Use the explorer script to inspect what's inside the ChromaDB store:
+
+```bash
+# Overview -- collections, projects, node types, sessions, and sample nodes
+uv run python cognitive-memory/scripts/explore_store.py
+
+# Point to a specific store directory
+uv run python cognitive-memory/scripts/explore_store.py --store-dir cognitive-memory/data/memory_store
+
+# Filter by project
+uv run python cognitive-memory/scripts/explore_store.py --project mcp-gateway-registry
+
+# Filter by node type (hypothesis, investigation, discovery, pivot, solution, dead_end, context_load)
+uv run python cognitive-memory/scripts/explore_store.py --type dead_end
+
+# Combine filters -- show only pivot nodes for a project, up to 20 results
+uv run python cognitive-memory/scripts/explore_store.py --project mcp-gateway-registry --type pivot --limit 20
+
+# Look up a single node by ID (shows full metadata, document, and embedding info)
+uv run python cognitive-memory/scripts/explore_store.py --node-id node-000-01
+
+# Semantic search over stored reasoning nodes
+uv run python cognitive-memory/scripts/explore_store.py --search "debugging pydantic"
+
+# Semantic search scoped to a project
+uv run python cognitive-memory/scripts/explore_store.py --search "migration failure" --project mcp-gateway-registry
+
+# Skip the overview tables, jump straight to node listing
+uv run python cognitive-memory/scripts/explore_store.py --nodes-only --limit 20
+```
+
+The default store location is `cognitive-memory/data/memory_store`. Override
+with `--store-dir` to point at any ChromaDB persistent directory.
+
 ## Running Tests
 
 ```bash
@@ -419,6 +455,7 @@ cmm/
 │   │   ├── ingest.py             # Batch ingestion
 │   │   ├── batch_consolidate.py  # Cold-tier consolidation
 │   │   ├── controlled_comparison.py  # A/B comparison (--cold, --compare-profiles)
+│   │   ├── explore_store.py       # ChromaDB store explorer
 │   │   ├── eval_report.py        # Evaluation dashboard
 │   │   └── visualize_dag.py      # DAG visualization generator
 │   ├── fixtures/                 # 10 sample session transcripts
