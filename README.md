@@ -124,7 +124,19 @@ cmm --help
 
 ### Environment Variables
 
-See [`.env.example`](cognitive-memory/.env.example) for a complete template.
+Copy the template and fill in your keys:
+
+```bash
+cp cognitive-memory/.env.example cognitive-memory/.env
+# Edit cognitive-memory/.env with your actual keys
+```
+
+The CLI auto-loads `cognitive-memory/.env` at startup via `python-dotenv`,
+so you can set all variables there instead of exporting them in your shell.
+The `.env` file is in `.gitignore` and will not be committed.
+
+See [`.env.example`](cognitive-memory/.env.example) for the full template.
+The most common variables:
 
 ```bash
 # Required
