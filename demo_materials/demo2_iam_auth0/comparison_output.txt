@@ -1,0 +1,51 @@
+[04/15/26 16:33:16] INFO     HTTP Request: POST                  _client.py:1025
+                             https://api.openai.com/v1/embedding                
+                             s "HTTP/1.1 200 OK"                                
+Wrote prompts to demo_materials/demo2_iam_auth0/
+Using cold-tier (LLM) extraction...
+[04/15/26 16:33:43] INFO     Window 0: LLM returned 4341      dag_builder.py:331
+                             chars, first 200: ```json                          
+                             {                                                  
+                               "nodes": [                                       
+                                 {                                              
+                                   "node_type":                                 
+                             "CONTEXT_LOAD",                                    
+                                   "summary": "Agent explores                   
+                             the codebase structure to locate                   
+                             IAM-related files in backend                       
+                             (Python) and frontend                              
+                             (TypeScript).",                                    
+                                                                                
+                    INFO     Window 0: parsed 10 nodes from   dag_builder.py:341
+                             LLM response                                       
+[04/15/26 16:34:03] INFO     Window 0: LLM returned 3218      dag_builder.py:331
+                             chars, first 200: ```json                          
+                             {                                                  
+                               "nodes": [                                       
+                                 {                                              
+                                   "node_type":                                 
+                             "CONTEXT_LOAD",                                    
+                                   "summary": "Agent reads                      
+                             the exploration results and IAM                    
+                             management code to understand                      
+                             the AUTH_PROVIDER configuration                    
+                             and routing                                        
+                    INFO     Window 0: parsed 7 nodes from    dag_builder.py:341
+                             LLM response                                       
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Controlled Comparison: Memory vs No-Memory                                   │
+│ Task: IAM shows Keycloak groups when Auth0 is configured. Fix the IAM        │
+│ provider routing                                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+┏━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┓
+┃ Metric           ┃ Baseline (no memory) ┃ Assisted (with memory) ┃ Reduction ┃
+┡━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━┩
+│ Dead ends        │                    0 │                      0 │     +0.0% │
+│ Pivots           │                    0 │                      0 │     +0.0% │
+│ Msgs to solution │                   67 │                     51 │     +0.0% │
+│ Total nodes      │                   10 │                      7 │    +30.0% │
+└──────────────────┴──────────────────────┴────────────────────────┴───────────┘
+Verdict: No measurable difference
+
+Report: 
+demo_materials/demo2_iam_auth0/comparison_mcp-gateway-registry_1776285245.json

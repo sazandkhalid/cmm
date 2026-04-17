@@ -1,0 +1,29 @@
+{
+  "baseline": {
+    "total_nodes": 10,
+    "dead_ends": 0,
+    "pivots": 0,
+    "solutions": 5,
+    "hypotheses": 0,
+    "messages_to_first_solution": 67
+  },
+  "assisted": {
+    "total_nodes": 7,
+    "dead_ends": 0,
+    "pivots": 0,
+    "solutions": 2,
+    "hypotheses": 0,
+    "messages_to_first_solution": 51
+  },
+  "reductions": {
+    "dead_ends": 0.0,
+    "pivots": 0.0,
+    "messages_to_solution": 23.9,
+    "total_nodes": 30.0
+  },
+  "verdict": "no_difference",
+  "task": "IAM shows Keycloak groups when Auth0 is configured. Fix the IAM provider routing.",
+  "project": "mcp-gateway-registry",
+  "timestamp": "2026-04-15T20:34:05.982340+00:00",
+  "extraction_tier": "cold"
+}

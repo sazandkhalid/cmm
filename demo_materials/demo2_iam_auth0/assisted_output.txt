@@ -1,0 +1,20 @@
+Both fixes are in place and consistent with the dynamic pattern already used in `nginx_service.py`, `server_routes.py`, and the M2M route in `management_routes.py` (line 217).
+
+Here's a summary of the bug and the fix:
+
+---
+
+**Root cause**: `iam_manager.py` and `management_routes.py` each defined a module-level constant:
+
+```python
+AUTH_PROVIDER: str = os.environ.get("AUTH_PROVIDER", "keycloak")
+```
+
+`os.environ.get()` is called **once at module import time**. `get_iam_manager()` then used the cached constant (`AUTH_PROVIDER.lower()`) instead of re-reading the environment. If `AUTH_PROVIDER=auth0` is injected after Python imports the module (e.g., Kubernetes secret mount, Docker Compose env file evaluated late, or a hot-reload scenario), the factory still sees `"keycloak"` and returns `KeycloakIAMManager`, showing Keycloak groups on the IAM page.
+
+**Fix**: Two lines changed to read `os.environ.get("AUTH_PROVIDER", "keycloak")` dynamically at call time:
+
+- `registry/utils/iam_manager.py:611` — inside `get_iam_manager()` (the factory that selects the provider backend)
+- `registry/api/management_routes.py:446` — inside `management_create_group()` (where group mapping ID strategy differs per provider)
+
+This matches the pattern already used in `nginx_service.py:392`, `server_routes.py:3705`, and `management_routes.py:217`.

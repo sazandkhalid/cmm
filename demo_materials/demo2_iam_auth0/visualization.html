@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CMM Demo 2 — IAM Auth0 Routing Bug</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0f; color: #e2e8f0; line-height: 1.6; }
+
+  /* NAV */
+  .nav { display: flex; align-items: center; justify-content: space-between; padding: 18px 48px; border-bottom: 1px solid #1e2030; background: #0d0d14; position: sticky; top: 0; z-index: 100; }
+  .nav-brand { font-size: 15px; font-weight: 600; color: #7c6af7; letter-spacing: 0.05em; }
+  .nav-title { font-size: 13px; color: #64748b; }
+  .nav-badge { font-size: 11px; background: #1e1b4b; color: #818cf8; padding: 4px 10px; border-radius: 20px; border: 1px solid #3730a3; }
+
+  /* HERO */
+  .hero { padding: 80px 48px 60px; max-width: 1100px; margin: 0 auto; }
+  .hero-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.15em; color: #6366f1; text-transform: uppercase; margin-bottom: 16px; }
+  .hero-title { font-size: 42px; font-weight: 700; line-height: 1.15; color: #f1f5f9; margin-bottom: 20px; }
+  .hero-title span { color: #818cf8; }
+  .hero-sub { font-size: 17px; color: #94a3b8; max-width: 680px; }
+
+  /* TASK CARD */
+  .task-card { max-width: 1100px; margin: 0 auto 60px; padding: 0 48px; }
+  .card { background: #0f1117; border: 1px solid #1e2030; border-radius: 12px; overflow: hidden; }
+  .card-header { padding: 14px 20px; background: #13151f; border-bottom: 1px solid #1e2030; display: flex; align-items: center; gap: 10px; }
+  .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .card-label { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #64748b; }
+  .card-body { padding: 24px; }
+  .task-text { font-size: 16px; color: #cbd5e1; line-height: 1.7; font-style: italic; border-left: 3px solid #6366f1; padding-left: 20px; }
+
+  /* PROFILE ENTRY */
+  .profile-section { max-width: 1100px; margin: 0 auto 60px; padding: 0 48px; }
+  .section-label { font-size: 11px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #6366f1; margin-bottom: 20px; }
+  .profile-card { background: #0f1117; border: 1px solid #22c55e33; border-radius: 12px; overflow: hidden; position: relative; }
+  .profile-glow { position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, #22c55e, #16a34a, transparent); }
+  .confidence-badge { display: inline-flex; align-items: center; gap: 6px; background: #14532d; color: #4ade80; font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 20px; border: 1px solid #16a34a; }
+  .confidence-dot { width: 6px; height: 6px; background: #4ade80; border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .profile-subsystem { font-size: 12px; color: #64748b; margin: 12px 0 6px; }
+  .profile-text { font-size: 15px; color: #e2e8f0; line-height: 1.7; }
+  .profile-highlight { background: #1e1b4b; color: #a5b4fc; padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; }
+  .resolution { margin-top: 14px; padding: 14px 16px; background: #0c1a0c; border-radius: 8px; border: 1px solid #166534; }
+  .resolution-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: #4ade80; text-transform: uppercase; margin-bottom: 6px; }
+  .resolution-text { font-size: 13px; color: #86efac; }
+
+  /* STATS */
+  .stats-section { max-width: 1100px; margin: 0 auto 60px; padding: 0 48px; }
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+  .stats-card { background: #0f1117; border: 1px solid #1e2030; border-radius: 12px; overflow: hidden; }
+  .stats-card.baseline { border-top: 3px solid #ef4444; }
+  .stats-card.assisted { border-top: 3px solid #22c55e; }
+  .stats-header { padding: 16px 20px; border-bottom: 1px solid #1e2030; display: flex; align-items: center; justify-content: space-between; }
+  .stats-title { font-size: 13px; font-weight: 700; }
+  .stats-title.red { color: #f87171; }
+  .stats-title.green { color: #4ade80; }
+  .stats-session { font-size: 11px; color: #475569; font-family: monospace; }
+  .stats-body { padding: 20px; }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #1a1f2e; }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-name { font-size: 13px; color: #94a3b8; }
+  .stat-value { font-size: 22px; font-weight: 700; }
+  .stat-value.red { color: #fca5a5; }
+  .stat-value.green { color: #86efac; }
+  .stat-unit { font-size: 11px; color: #475569; margin-left: 4px; }
+
+  /* REDUCTION BANNER */
+  .reduction-banner { max-width: 1100px; margin: 0 auto 60px; padding: 0 48px; }
+  .banner-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .banner-item { background: linear-gradient(135deg, #0f1117, #13151f); border: 1px solid #1e2030; border-radius: 12px; padding: 24px; text-align: center; position: relative; overflow: hidden; }
+  .banner-item::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, #6366f1, #818cf8); }
+  .banner-pct { font-size: 48px; font-weight: 800; color: #818cf8; line-height: 1; margin-bottom: 8px; }
+  .banner-label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; }
+
+  /* TIMELINE */
+  .timeline-section { max-width: 1100px; margin: 0 auto 60px; padding: 0 48px; }
+  .timeline-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+  .timeline-col { background: #0f1117; border: 1px solid #1e2030; border-radius: 12px; overflow: hidden; }
+  .timeline-header { padding: 14px 20px; border-bottom: 1px solid #1e2030; font-size: 12px; font-weight: 700; }
+  .timeline-header.red { color: #f87171; background: #1a0a0a; }
+  .timeline-header.green { color: #4ade80; background: #0a1a0a; }
+  .timeline-body { padding: 20px; }
+  .t-event { display: flex; gap: 12px; margin-bottom: 14px; }
+  .t-msg { font-size: 10px; font-weight: 700; color: #475569; min-width: 36px; padding-top: 2px; font-family: monospace; }
+  .t-content { flex: 1; }
+  .t-action { font-size: 12px; color: #94a3b8; margin-bottom: 3px; }
+  .t-action .tool { font-family: monospace; font-size: 11px; }
+  .t-action .file { color: #818cf8; }
+  .t-text { font-size: 12px; color: #64748b; line-height: 1.5; }
+  .t-event.milestone .t-action { color: #fbbf24; font-weight: 600; }
+  .t-event.solution .t-action { color: #4ade80; font-weight: 700; }
+  .t-event.wasted { opacity: 0.5; }
+  .t-divider { height: 1px; background: #1e2030; margin: 14px 0; }
+  .t-gap { text-align: center; font-size: 11px; color: #475569; padding: 6px 0; }
+
+  /* CODE COMPARE */
+  .code-section { max-width: 1100px; margin: 0 auto 60px; padding: 0 48px; }
+  .code-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+  .code-card { background: #0d0f18; border: 1px solid #1e2030; border-radius: 12px; overflow: hidden; }
+  .code-header { padding: 12px 16px; border-bottom: 1px solid #1e2030; display: flex; align-items: center; gap: 8px; }
+  .code-filename { font-size: 12px; font-family: monospace; color: #94a3b8; }
+  .code-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
+  .code-badge.before { background: #450a0a; color: #fca5a5; }
+  .code-badge.after { background: #052e16; color: #86efac; }
+  pre { padding: 20px; font-size: 12px; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; line-height: 1.7; overflow-x: auto; color: #94a3b8; }
+  .hl-red { color: #f87171; background: #450a0a; display: block; margin: 0 -20px; padding: 0 20px; }
+  .hl-green { color: #4ade80; background: #052e16; display: block; margin: 0 -20px; padding: 0 20px; }
+  .hl-comment { color: #475569; }
+  .kw { color: #c084fc; }
+  .fn { color: #60a5fa; }
+  .str { color: #86efac; }
+  .var { color: #fbbf24; }
+
+  /* FILES CHART */
+  .files-section { max-width: 1100px; margin: 0 auto 60px; padding: 0 48px; }
+  .files-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+  .files-col { background: #0f1117; border: 1px solid #1e2030; border-radius: 12px; padding: 20px; }
+  .files-title { font-size: 12px; font-weight: 700; margin-bottom: 16px; }
+  .files-title.red { color: #f87171; }
+  .files-title.green { color: #4ade80; }
+  .file-item { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .file-bar-wrap { flex: 1; height: 6px; background: #1e2030; border-radius: 3px; overflow: hidden; }
+  .file-bar { height: 100%; border-radius: 3px; }
+  .file-bar.red { background: #ef4444; }
+  .file-bar.green { background: #22c55e; }
+  .file-name { font-size: 11px; font-family: monospace; color: #94a3b8; min-width: 200px; }
+  .file-layer { font-size: 10px; color: #475569; }
+
+  /* VERDICT */
+  .verdict-section { max-width: 1100px; margin: 0 auto 80px; padding: 0 48px; }
+  .verdict-card { background: linear-gradient(135deg, #0f1117, #0d1117); border: 1px solid #22c55e44; border-radius: 16px; padding: 40px; position: relative; overflow: hidden; }
+  .verdict-glow { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #22c55e, #4ade80, #22c55e); }
+  .verdict-title { font-size: 28px; font-weight: 800; color: #4ade80; margin-bottom: 16px; }
+  .verdict-text { font-size: 16px; color: #94a3b8; line-height: 1.8; max-width: 800px; }
+  .verdict-text strong { color: #e2e8f0; }
+
+  hr.divider { border: none; border-top: 1px solid #1e2030; max-width: 1100px; margin: 0 auto 60px; padding: 0 48px; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <span class="nav-brand">CMM</span>
+  <span class="nav-title">Controlled A/B Comparison — mcp-gateway-registry</span>
+  <span class="nav-badge">Applied ML Conference 2026</span>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-tag">Demo 2 of 3</div>
+  <h1 class="hero-title">IAM shows <span>Keycloak groups</span><br>when Auth0 is configured</h1>
+  <p class="hero-sub">Same bug. Same codebase. Two agents — one with 43 sessions of accumulated memory, one starting cold.</p>
+</section>
+
+<!-- TASK -->
+<section class="task-card">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot" style="background:#6366f1"></div>
+      <span class="card-label">Task Prompt — identical for both agents</span>
+    </div>
+    <div class="card-body">
+      <p class="task-text">"When Auth0 is configured as the authentication provider (AUTH_PROVIDER=auth0), the IAM management page still shows Keycloak groups instead of Auth0 groups. Users can see and interact with groups that belong to Keycloak even though Auth0 is the active provider. Debug the IAM provider routing logic and fix it so the correct IAM backend is used when Auth0 is configured."</p>
+    </div>
+  </div>
+</section>
+
+<!-- PROFILE ENTRY -->
+<section class="profile-section">
+  <div class="section-label">What memory contained</div>
+  <div class="profile-card">
+    <div class="profile-glow"></div>
+    <div class="card-body">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+        <div class="confidence-badge"><span class="confidence-dot"></span> 95% confidence — highest in the entire profile</div>
+        <span style="font-size:11px;color:#475569;">Line 49 of cached_profile.md</span>
+      </div>
+      <div class="profile-subsystem">[IAM Group Management / Auth Provider Abstraction Layer]</div>
+      <p class="profile-text">The <span class="profile-highlight">get_iam_manager()</span> factory function lacks an Auth0-specific case and falls through to the default Keycloak manager. This means when Auth0 is configured as the active authentication provider, IAM group management operations (create/delete/list) still use the Keycloak backend, causing Keycloak groups to appear in the IAM UI even when Auth0 is active. The provider abstraction is incomplete — Auth0 was never wired into the IAM manager dispatch logic.</p>
+      <div class="resolution">
+        <div class="resolution-label">Resolution</div>
+        <div class="resolution-text">Add an Auth0 case to the <code>get_iam_manager()</code> factory and read <code>AUTH_PROVIDER</code> dynamically from <code>os.environ</code> at call time, not at module import time.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section class="stats-section">
+  <div class="section-label">Session Statistics</div>
+  <div class="stats-grid">
+    <div class="stats-card baseline">
+      <div class="stats-header">
+        <span class="stats-title red">Baseline — No Memory</span>
+        <span class="stats-session">2ca82ddf</span>
+      </div>
+      <div class="stats-body">
+        <div class="stat-row"><span class="stat-name">Assistant messages</span><span class="stat-value red">119<span class="stat-unit">msgs</span></span></div>
+        <div class="stat-row"><span class="stat-name">Root cause identified</span><span class="stat-value red">msg 48</span></div>
+        <div class="stat-row"><span class="stat-name">Files written</span><span class="stat-value red">7<span class="stat-unit">files</span></span></div>
+        <div class="stat-row"><span class="stat-name">Session size</span><span class="stat-value red">1,127<span class="stat-unit">KB</span></span></div>
+        <div class="stat-row"><span class="stat-name">Read profile</span><span class="stat-value red" style="font-size:14px;">No (bare mode)</span></div>
+        <div class="stat-row"><span class="stat-name">Layers explored</span><span class="stat-value red">7</span></div>
+      </div>
+    </div>
+    <div class="stats-card assisted">
+      <div class="stats-header">
+        <span class="stats-title green">Assisted — With Memory</span>
+        <span class="stats-session">8f0be201</span>
+      </div>
+      <div class="stats-body">
+        <div class="stat-row"><span class="stat-name">Assistant messages</span><span class="stat-value green">46<span class="stat-unit">msgs</span></span></div>
+        <div class="stat-row"><span class="stat-name">Root cause identified</span><span class="stat-value green">msg 37</span></div>
+        <div class="stat-row"><span class="stat-name">Files written</span><span class="stat-value green">2<span class="stat-unit">files</span></span></div>
+        <div class="stat-row"><span class="stat-name">Session size</span><span class="stat-value green">281<span class="stat-unit">KB</span></span></div>
+        <div class="stat-row"><span class="stat-name">Read profile</span><span class="stat-value green" style="font-size:14px;">Yes (msg 2)</span></div>
+        <div class="stat-row"><span class="stat-name">Layers explored</span><span class="stat-value green">2</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- REDUCTION BANNER -->
+<section class="reduction-banner">
+  <div class="banner-grid">
+    <div class="banner-item">
+      <div class="banner-pct">61%</div>
+      <div class="banner-label">Fewer messages</div>
+    </div>
+    <div class="banner-item">
+      <div class="banner-pct">71%</div>
+      <div class="banner-label">Fewer files touched</div>
+    </div>
+    <div class="banner-item">
+      <div class="banner-pct">75%</div>
+      <div class="banner-label">Smaller session size</div>
+    </div>
+  </div>
+</section>
+
+<!-- TIMELINE -->
+<section class="timeline-section">
+  <div class="section-label">Agent Reasoning Timeline</div>
+  <div class="timeline-grid">
+
+    <div class="timeline-col">
+      <div class="timeline-header red">Baseline — 119 messages to complete</div>
+      <div class="timeline-body">
+        <div class="t-event">
+          <div class="t-msg">msg 2</div>
+          <div class="t-content">
+            <div class="t-action">Starting exploration — no direction</div>
+            <div class="t-text">"Let me start by exploring the codebase to understand the structure and find the relevant files."</div>
+          </div>
+        </div>
+        <div class="t-event wasted">
+          <div class="t-msg">3–10</div>
+          <div class="t-content"><div class="t-action"><span class="tool">Bash()</span> × 8 — broad codebase search</div></div>
+        </div>
+        <div class="t-event">
+          <div class="t-msg">11–12</div>
+          <div class="t-content"><div class="t-action"><span class="tool">Read(<span class="file">registry/utils/iam_manager.py</span>)</span></div></div>
+        </div>
+        <div class="t-event wasted">
+          <div class="t-msg">14–26</div>
+          <div class="t-content">
+            <div class="t-action">Exploring frontend — wrong layer</div>
+            <div class="t-text">IAMGroups.tsx, SettingsPage, useIAM.ts, useRegistryConfig, IAMUsers.tsx, config_routes.py</div>
+          </div>
+        </div>
+        <div class="t-event wasted">
+          <div class="t-msg">28–38</div>
+          <div class="t-content">
+            <div class="t-action">Deeper exploration — still not there</div>
+            <div class="t-text">config.py, system_routes.py, auth_server/factory.py, IAMM2M.tsx, auth0_manager.py</div>
+          </div>
+        </div>
+        <div class="t-event milestone">
+          <div class="t-msg">48</div>
+          <div class="t-content">
+            <div class="t-action">Root cause finally identified</div>
+            <div class="t-text">"AUTH_PROVIDER is captured as a module-level constant at import time. get_iam_manager() uses this stale value."</div>
+          </div>
+        </div>
+        <div class="t-event">
+          <div class="t-msg">49–119</div>
+          <div class="t-content">
+            <div class="t-action">70 more messages — fixing 7 files + tests</div>
+            <div class="t-text">iam_manager.py, management_routes.py, config_routes.py, useRegistryConfig.ts, IAMGroups.tsx, 2 test files</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline-col">
+      <div class="timeline-header green">Assisted — 46 messages to complete</div>
+      <div class="timeline-body">
+        <div class="t-event solution">
+          <div class="t-msg">msg 2</div>
+          <div class="t-content">
+            <div class="t-action">Reads profile via subagent — knows where to look</div>
+            <div class="t-text">Profile entry (95% conf): "get_iam_manager() factory lacks Auth0 case, falls through to Keycloak."</div>
+          </div>
+        </div>
+        <div class="t-event solution">
+          <div class="t-msg">msg 5</div>
+          <div class="t-content">
+            <div class="t-action"><span class="tool">Read(<span class="file">registry/utils/iam_manager.py</span>)</span></div>
+            <div class="t-text">Goes directly to the right file. No frontend exploration. No broad search.</div>
+          </div>
+        </div>
+        <div class="t-event">
+          <div class="t-msg">6–36</div>
+          <div class="t-content">
+            <div class="t-action">Targeted investigation — backend only</div>
+            <div class="t-text">management_routes.py, config.py, iam_manager.py — reading the specific files that matter</div>
+          </div>
+        </div>
+        <div class="t-event solution">
+          <div class="t-msg">37</div>
+          <div class="t-content">
+            <div class="t-action">Root cause precisely articulated</div>
+            <div class="t-text">"iam_manager.py line 25: AUTH_PROVIDER read once at module import time. get_iam_manager() line 607 uses the stale constant. Fix: read os.environ dynamically."</div>
+          </div>
+        </div>
+        <div class="t-event solution">
+          <div class="t-msg">38–46</div>
+          <div class="t-content">
+            <div class="t-action">Fixed in 2 files. Done.</div>
+            <div class="t-text">iam_manager.py + management_routes.py. Verified compile passes.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- CODE COMPARE -->
+<section class="code-section">
+  <div class="section-label">The Bug and the Fix</div>
+  <div class="code-grid">
+
+    <div class="code-card">
+      <div class="code-header">
+        <span class="code-filename">registry/utils/iam_manager.py</span>
+        <span class="code-badge before">BEFORE (broken)</span>
+      </div>
+      <pre><span class="hl-comment"># Line 25 — module-level constant</span>
+<span class="hl-comment"># Read ONCE at import time. Never updates.</span>
+<span class="hl-red"><span class="var">AUTH_PROVIDER</span>: <span class="kw">str</span> = <span class="fn">os.environ</span>.get(
+    <span class="str">"AUTH_PROVIDER"</span>, <span class="str">"keycloak"</span>
+)</span>
+
+<span class="hl-comment"># ...</span>
+
+<span class="hl-comment"># Line 607 — factory function</span>
+<span class="kw">def</span> <span class="fn">get_iam_manager</span>():
+<span class="hl-red">    provider = <span class="var">AUTH_PROVIDER</span>.lower()  <span class="hl-comment"># stale!</span></span>
+    <span class="kw">if</span> provider == <span class="str">"keycloak"</span>:
+        <span class="kw">return</span> <span class="fn">KeycloakIAMManager</span>()
+    <span class="hl-comment"># No Auth0 case — falls through to Keycloak</span>
+    <span class="kw">return</span> <span class="fn">KeycloakIAMManager</span>()
+</pre>
+    </div>
+
+    <div class="code-card">
+      <div class="code-header">
+        <span class="code-filename">registry/utils/iam_manager.py</span>
+        <span class="code-badge after">AFTER (fixed)</span>
+      </div>
+      <pre><span class="hl-comment"># Module-level constant removed entirely</span>
+
+
+
+
+<span class="hl-comment"># ...</span>
+
+<span class="hl-comment"># Line 607 — factory function</span>
+<span class="kw">def</span> <span class="fn">get_iam_manager</span>():
+<span class="hl-green">    provider = <span class="fn">os.environ</span>.get(  <span class="hl-comment"># dynamic!</span>
+        <span class="str">"AUTH_PROVIDER"</span>, <span class="str">"keycloak"</span>
+    ).lower()</span>
+    <span class="kw">if</span> provider == <span class="str">"keycloak"</span>:
+        <span class="kw">return</span> <span class="fn">KeycloakIAMManager</span>()
+<span class="hl-green">    <span class="kw">elif</span> provider == <span class="str">"auth0"</span>:
+        <span class="kw">return</span> <span class="fn">Auth0IAMManager</span>()</span>
+    <span class="kw">return</span> <span class="fn">KeycloakIAMManager</span>()
+</pre>
+    </div>
+
+  </div>
+</section>
+
+<!-- FILES TOUCHED -->
+<section class="files-section">
+  <div class="section-label">Files Written — Scope of Changes</div>
+  <div class="files-grid">
+
+    <div class="files-col">
+      <div class="files-title red">Baseline — 7 files (over-engineered)</div>
+      <div class="file-item"><span class="file-name">registry/utils/iam_manager.py</span><div class="file-bar-wrap"><div class="file-bar red" style="width:100%"></div></div><span class="file-layer" style="color:#f87171">core</span></div>
+      <div class="file-item"><span class="file-name">registry/api/management_routes.py</span><div class="file-bar-wrap"><div class="file-bar red" style="width:100%"></div></div><span class="file-layer" style="color:#f87171">backend</span></div>
+      <div class="file-item"><span class="file-name">registry/api/config_routes.py</span><div class="file-bar-wrap"><div class="file-bar red" style="width:80%"></div></div><span class="file-layer">backend</span></div>
+      <div class="file-item"><span class="file-name">frontend/src/hooks/useRegistryConfig.ts</span><div class="file-bar-wrap"><div class="file-bar red" style="width:70%"></div></div><span class="file-layer">frontend</span></div>
+      <div class="file-item"><span class="file-name">frontend/src/components/IAMGroups.tsx</span><div class="file-bar-wrap"><div class="file-bar red" style="width:70%"></div></div><span class="file-layer">frontend</span></div>
+      <div class="file-item"><span class="file-name">tests/unit/test_iam_manager.py</span><div class="file-bar-wrap"><div class="file-bar red" style="width:50%"></div></div><span class="file-layer">tests</span></div>
+      <div class="file-item"><span class="file-name">tests/unit/api/test_management_routes.py</span><div class="file-bar-wrap"><div class="file-bar red" style="width:50%"></div></div><span class="file-layer">tests</span></div>
+    </div>
+
+    <div class="files-col">
+      <div class="files-title green">Assisted — 2 files (minimal, correct)</div>
+      <div class="file-item"><span class="file-name">registry/utils/iam_manager.py</span><div class="file-bar-wrap"><div class="file-bar green" style="width:100%"></div></div><span class="file-layer" style="color:#4ade80">core</span></div>
+      <div class="file-item"><span class="file-name">registry/api/management_routes.py</span><div class="file-bar-wrap"><div class="file-bar green" style="width:100%"></div></div><span class="file-layer" style="color:#4ade80">backend</span></div>
+      <div style="margin-top:16px; padding:12px; background:#0a1a0a; border-radius:8px; border:1px solid #166534;">
+        <div style="font-size:11px; color:#4ade80; font-weight:700; margin-bottom:6px;">WHY ONLY 2 FILES</div>
+        <div style="font-size:12px; color:#86efac; line-height:1.6;">The profile entry told the agent exactly what was broken: the factory function reads a stale module-level constant. The fix is local to the backend — no frontend changes needed. The baseline didn't know this and spread changes across 7 files.</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- VERDICT -->
+<section class="verdict-section">
+  <div class="verdict-card">
+    <div class="verdict-glow"></div>
+    <div class="verdict-title">Memory helped — 61% fewer messages, 71% fewer files.</div>
+    <p class="verdict-text">
+      The profile had this exact bug documented at <strong>95% confidence</strong> — the highest entry in the entire profile.
+      The assisted agent went directly to <strong>iam_manager.py at message 5</strong> and fixed it in 2 files.
+      The baseline explored 7 layers including frontend components it never needed to touch,
+      took 48 messages to identify the root cause, and wrote 7 files.
+      <br><br>
+      <strong>This knowledge existed in the transcripts.</strong> CMM extracted it, stored it, and made it available
+      to every future session — automatically.
+    </p>
+  </div>
+</section>
+
+</body>
+</html>
