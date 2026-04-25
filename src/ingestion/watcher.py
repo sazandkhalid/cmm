@@ -207,16 +207,47 @@ class SessionWatcher:
     def derive_project_id(self, project_dir_name: str) -> str:
         """Derive a project ID from the Claude Code directory name.
 
-        Claude Code uses directory names like:
-            -Users-sazankhalid-Downloads-cmm → cmm
-            -Users-sazankhalid-Downloads-mcp-gateway → mcp-gateway
+        Claude Code encodes the working directory by replacing both '/' and
+        '.' with '-', so dir names are ambiguous (e.g. the encoded name
+        `-home-joelaf-repo-linux-nova-irq-7-1` could come from
+        `/home/joelaf/repo/linux-nova-irq-7.1` or
+        `/home/joelaf/repo/linux/nova/irq/7/1`). The only reliable source
+        for the original cwd is the ``cwd`` field inside the session JSONL
+        files, so we prefer reading that when available.
+
+        Strategy:
+            1. If an explicit project_map entry exists, honour it.
+            2. Scan any session JSONL in the dir for a line containing
+               ``cwd`` and return basename(cwd).
+            3. Fall back to the legacy skip-common-segments heuristic if
+               no JSONL contains a cwd (empty dir, snapshot-only files).
         """
         if project_dir_name in self.project_map:
             return self.project_map[project_dir_name]
 
-        # Take the last path segment from the encoded directory name
+        # Authoritative: pull the original cwd from any session file
+        project_dir = self.watch_dir / project_dir_name
+        try:
+            for jsonl in project_dir.glob("*.jsonl"):
+                try:
+                    with jsonl.open() as f:
+                        for line in f:
+                            try:
+                                entry = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            cwd = entry.get("cwd")
+                            if cwd:
+                                name = os.path.basename(cwd.rstrip("/"))
+                                if name:
+                                    return name
+                except OSError:
+                    continue
+        except OSError:
+            pass
+
+        # Fallback: original heuristic for dirs without readable session files
         parts = project_dir_name.strip("-").split("-")
-        # Find the last meaningful segment (skip username/common paths)
         skip = {"users", "home", "documents", "downloads", "desktop", "projects", "repos", "src", "code"}
         meaningful = [p for p in parts if p.lower() not in skip]
         return meaningful[-1] if meaningful else project_dir_name

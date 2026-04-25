@@ -40,7 +40,7 @@ from openai import OpenAI
 from ..schemas.memory import CognitiveProfile
 from ..schemas.reasoning import ReasoningDAG, ReasoningNode
 
-_DEFAULT_MODEL = "text-embedding-3-small"
+_DEFAULT_MODEL = os.environ.get("CMM_EMBEDDING_MODEL", "text-embedding-3-small")
 _COLLECTION_NODES = "reasoning_nodes"
 _COLLECTION_PROFILES = "cognitive_profiles"
 _COLLECTION_STAGING = "reasoning_nodes_staging"  # shared-store only
@@ -149,7 +149,10 @@ class MemoryStore:
         self._persist_dir = self._local_path  # legacy field used by batch_consolidate
 
         self._embedding_model = embedding_model
-        self._openai = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
+        self._openai = OpenAI(
+            api_key=api_key or os.environ.get("OPENAI_API_KEY"),
+            base_url=os.environ.get("OPENAI_BASE_URL"),
+        )
 
     # ── Shared-mode introspection ──────────────────────────────────────────
 
@@ -343,11 +346,12 @@ class MemoryStore:
             [i.insight for i in profile.architectural_insights]
             + [p.description for p in profile.pitfalls]
         )
-        # OpenAI text-embedding-3-small has an 8192-token limit.
-        # Truncate by word count as a cheap proxy (~4 chars/token → ~6000 words safe).
+        # Truncate by word count. Default 6000 suits OpenAI's 8192-token limit;
+        # smaller embed models (e.g. mxbai-embed-large = 512 tokens) need less.
+        max_words = int(os.environ.get("CMM_EMBED_MAX_WORDS", "6000"))
         words = text.split()
-        if len(words) > 6000:
-            text = " ".join(words[:6000])
+        if len(words) > max_words:
+            text = " ".join(words[:max_words])
         embedding = self.embed([text])[0]
 
         self.profiles_col.upsert(
